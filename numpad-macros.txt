@@ -1,0 +1,11 @@
+﻿7=app|notepad.exe
+8=app|calc.exe
+9=app|explorer.exe
+4=send|#d
+5=url|https://www.google.com
+6=url|https://www.naver.com
+1=text|안녕하세요
+2=send|{Volume_Up}
+3=send|{Volume_Down}
+0=send|^c
+.=url|https://mail.google.com

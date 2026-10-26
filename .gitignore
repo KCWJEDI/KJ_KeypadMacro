@@ -1,0 +1,5 @@
+*.lnk
+dbg.txt
+.DS_Store
+.staging/
+
