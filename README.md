@@ -1,4 +1,4 @@
-# KJ_KeypadMacro
+﻿# KJ_KeypadMacro
 
 NumLock 이 꺼져 있을 때 넘패드(키패드)를 매크로 버튼으로 쓰는 Windows 도구입니다.
 NumLock 을 켜면 평소처럼 숫자가 입력됩니다.
@@ -57,3 +57,12 @@ Ahk2Exe.exe /in source\numpad-macro-editor.ahk /out NumpadMacroEditor.exe /base 
 - Win 키 조합은 윈도우 단축키를 위해 건드리지 않습니다.
 - 관리자 권한으로 실행 중인 창에서는 매크로가 동작하지 않습니다.
 
+
+## 진단
+
+트레이 아이콘 우클릭 메뉴에 다음 항목이 있습니다.
+
+- 진단 로그 켜기/끄기 : 켜면 같은 폴더의 debug.log 에 키 입력, 매크로 종류, NumLock 상태, 매크로를 누른 시점의 앞 창을 기록합니다.
+- 설정 다시 읽기 : 설정 파일을 즉시 다시 읽습니다.
+
+NumLock 상태가 바뀌면 화면 위쪽에 현재 모드가 잠깐 표시되고, 트레이 아이콘 설명에도 반영됩니다.

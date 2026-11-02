@@ -8,27 +8,44 @@ Persistent
 ;    NumLock 켜짐 -> 평소처럼 숫자 입력
 ;
 ;  같은 키라도 Shift / Ctrl / Alt / Shift+Ctrl 을 누르면 다른 매크로가 나갑니다.
-;  매크로 내용은 numpad-macros.txt 에 저장되고, 편집기는 NumpadMacroEditor.exe 입니다.
+;  매크로는 numpad-macros.txt, 편집기는 NumpadMacroEditor.exe 입니다.
+;
+;  트레이 아이콘 메뉴
+;    - 매크로 편집...      : 편집기 실행
+;    - 진단 로그 켜기/끄기 : debug.log 에 입력 상황 기록
+;    - 설정 다시 읽기      : numpad-macros.txt 다시 읽기
 ; ================================================================
 
 CONFIG := A_ScriptDir . Chr(92) . "numpad-macros.txt"
+DEBUGFLAG := A_ScriptDir . Chr(92) . "debug.on"
+DEBUGLOG := A_ScriptDir . Chr(92) . "debug.log"
+
 MACRO := Map()
 STAMP := ""
+lastNumLock := GetKeyState("NumLock", "T")
 
 EnsureConfig()
 LoadConfig()
 SetTimer(WatchConfig, 1200)
+SetTimer(WatchNumLock, 400)
+UpdateTray()
+
+try {
+    if (FileExist(DEBUGLOG) && FileGetSize(DEBUGLOG) > 300000)
+        FileDelete DEBUGLOG
+}
 
 TrayTip("넘패드 매크로 실행 중", "NumLock OFF = 매크로 / ON = 숫자")
 A_TrayMenu.Add()
 A_TrayMenu.Add("매크로 편집...", (*) => OpenEditor())
+A_TrayMenu.Add("진단 로그 켜기/끄기", (*) => ToggleDebug())
 A_TrayMenu.Add("설정 다시 읽기", (*) => Reload())
 A_TrayMenu.Add()
 A_TrayMenu.Add("종료", (*) => ExitApp())
 
 ; NumLock 이 꺼져 있고 편집기 창이 앞에 있지 않을 때만 동작합니다.
 ; 보조키 조합마다 따로 등록하므로, 매크로를 넣지 않은 조합은 원래 키 동작이 그대로 나갑니다.
-#HotIf !GetKeyState("NumLock", "T") && !WinActive("넘패드 매크로 편집기")
+#HotIf !GetKeyState("NumLock", "T") && !WinActive("ahk_exe NumpadMacroEditor.exe")
 NumpadHome::Dispatch("7", "NumpadHome")
 +NumpadHome::Dispatch("7+S", "NumpadHome")
 ^NumpadHome::Dispatch("7+C", "NumpadHome")
@@ -90,23 +107,104 @@ NumpadDel::Dispatch(".", "NumpadDel")
 Dispatch(full, nav) {
     global MACRO
     if !MACRO.Has(full) {
+        Log("nomap", full . " -> " . nav)
         Send("{Blind}" . nav)
         return
     }
     m := MACRO[full]
     try {
-        if (m.type = "app")
+        if (m.type = "app") {
             Run m.value
-        else if (m.type = "url")
+            Log("run", full . " = " . m.value)
+        } else if (m.type = "send" && LooksLikeProgram(m.value)) {
             Run m.value
-        else if (m.type = "send")
+            Log("run (path in send)", full . " = " . m.value)
+        } else if (m.type = "url") {
+            Run m.value
+            Log("url", full . " = " . m.value)
+        } else if (m.type = "send") {
             Send m.value
-        else if (m.type = "text")
+            Log("send", full . " = " . m.value)
+        } else if (m.type = "text") {
             SendText m.value
+            Log("text", full . " = " . m.value)
+        } else {
+            Log("unknown-type", full . " type=" . m.type)
+        }
     } catch as e {
-        TrayTip("실행하지 못했습니다: " . m.value, "넘패드 매크로", 2)
+        Log("ERROR", full . " = " . m.value . " :: " . e.Message)
+        TrayTip("실행하지 못했습니다: " . e.Message, "넘패드 매크로", 2)
+        ShowTip("매크로 실패: " . e.Message, 3000)
     }
 }
+
+LooksLikeProgram(v) {
+    if !FileExist(v)
+        return false
+    SplitPath v, , , &ext
+    return (ext = "exe" || ext = "bat" || ext = "cmd" || ext = "lnk")
+}
+
+; ---------- 진단 로그 ----------
+
+IsDebug() {
+    global DEBUGFLAG
+    return FileExist(DEBUGFLAG) ? true : false
+}
+
+Log(tag, detail) {
+    global DEBUGLOG
+    if !IsDebug()
+        return
+    fg := ""
+    try fg := WinGetProcessName("A") . " | " . WinGetTitle("A")
+    line := FormatTime(A_Now, "MM-dd HH:mm:ss") . " | " . tag . " | " . detail
+        . " | nl=" . GetKeyState("NumLock", "T") . " | fg=" . fg
+    try FileAppend(line . Chr(10), DEBUGLOG, "UTF-8")
+}
+
+ToggleDebug() {
+    global DEBUGFLAG
+    if FileExist(DEBUGFLAG) {
+        try FileDelete DEBUGFLAG
+        ShowTip("진단 로그 꺼짐", 1500)
+    } else {
+        FileAppend("", DEBUGFLAG, "UTF-8")
+        ShowTip("진단 로그 켜짐 (debug.log)", 2000)
+        Log("info", "diagnostic logging started")
+    }
+}
+
+; ---------- 상태 표시 ----------
+
+WatchNumLock() {
+    global lastNumLock
+    st := GetKeyState("NumLock", "T")
+    if (st = lastNumLock)
+        return
+    lastNumLock := st
+    UpdateTray()
+    if (st = 0)
+        ShowTip("넘패드: 매크로 모드", 1600)
+    else
+        ShowTip("넘패드: 숫자 입력 모드 (매크로 꺼짐)", 1600)
+}
+
+UpdateTray() {
+    on := !GetKeyState("NumLock", "T")
+    A_IconTip := on ? "넘패드 매크로 - 사용 중 (NumLock 꺼짐)" : "넘패드 매크로 - 대기 (NumLock 켜짐)"
+}
+
+ShowTip(text, ms := 1500) {
+    ToolTip(text, A_ScreenWidth // 2 - 220, 60)
+    SetTimer(HideTip, -ms)
+}
+
+HideTip() {
+    ToolTip()
+}
+
+; ---------- 설정 ----------
 
 LoadConfig() {
     global CONFIG, MACRO, STAMP

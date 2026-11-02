@@ -3,3 +3,5 @@ dbg.txt
 .DS_Store
 .staging/
 
+debug.log
+debug.on
