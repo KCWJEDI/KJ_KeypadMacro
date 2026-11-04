@@ -4,8 +4,8 @@
 4=send|#d
 5=url|https://www.google.com
 6=url|https://www.naver.com
-1=app|W:\WorkSpace\4.KJWorkSpace\KJ_FlowForge\apps\hub\release\KJ-FlowForge-Setup-0.5.3-x64.exe
-2=send|W:\WorkSpace\4.KJWorkSpace\KJ_Service_CreateKey\KJ_FlowForge_CreateKey\KJ_FlowForge_CreateKey.exe
-3=send|{Volume_Down}
+1=app|W:\ProgramFiles\KJ_FlowForge\KJ FlowForge\KJ FlowForge.exe
+2=app|W:\WorkSpace\4.KJWorkSpace\KJ_Service_CreateKey\KJ_FlowForge_CreateKey\KJ_FlowForge_CreateKey.exe
+3=app|W:\WorkSpace\4.KJWorkSpace\KJ_FlowForgeServer\KJFlowForgeManager.exe
 0=send|^c
 .=url|https://mail.google.com

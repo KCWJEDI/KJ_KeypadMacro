@@ -57,7 +57,7 @@ for lyr in LAYERS {
     y += 34
 }
 
-g.Add("Text", Format("x172 y{} w550 cGray", y + 4), "체크한 줄만 동작합니다. 없는 조합은 원래 키 동작이 나갑니다.")
+g.Add("Text", Format("x172 y{} w550 cGray", y + 4), "체크한 줄만 동작합니다. '프로그램 실행'은 이미 실행 중이면 그 창을 앞으로 올립니다.")
 status := g.Add("Text", Format("x172 y{} w550 cGreen", y + 30), "")
 saveBtn := g.Add("Button", Format("x172 y{} w110", y + 56), "저장")
 saveBtn.OnEvent("Click", Save)
