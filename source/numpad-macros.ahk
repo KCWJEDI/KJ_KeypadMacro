@@ -136,48 +136,70 @@ Dispatch(full, nav) {
 
 LaunchOrActivate(target, full) {
     target := StrReplace(target, "/", Chr(92))
-    if ActivateRunning(target, full)
+    if CheckRunning(target, full)
         return
-    if AliasRunning(target, full)
-        return
+    before := WinTitles()
     Run target
     Log("run", full . " = " . target)
     SetTimer(LearnFromFolder.Bind(target), -1500)
+    SetTimer(LearnWindow.Bind(target, before), -5000)
 }
 
-; 1) 실행 파일 이름이 그대로인 경우
-ActivateRunning(target, full) {
-    SplitPath target, , , &ext, &name
-    if (ext != "exe")
-        return false
-    exe := name . ".exe"
-    if !ProcessExist(exe)
-        return false
-    return TryActivate(exe, full)
-}
-
-; 2) 런처가 띄운 다른 이름의 프로세스 (기억해 둔 이름)
-AliasRunning(target, full) {
+; 실행 중인지 확인해서, 창이 있으면 앞으로 올립니다. true 를 돌려주면 새로 실행하지 않습니다.
+CheckRunning(target, full) {
     global ALIASES
-    if !ALIASES.Has(target)
-        return false
-    for name in ALIASES[target] {
-        if !ProcessExist(name)
+    names := ALIASES.Has(target) ? ALIASES[target] : []
+    hasTitle := false
+    procNoWindow := false
+
+    ; 1) 창 제목으로 등록된 별칭 (예: win:KJ FlowForge - 서버 관리)
+    for a in names {
+        if (SubStr(a, 1, 4) = "win:") {
+            hasTitle := true
+            if TryActivateTitle(SubStr(a, 5), full)
+                return true
+        }
+    }
+
+    ; 2) 실행 파일 이름이 그대로인 경우
+    SplitPath target, , , &ext, &base
+    if (ext = "exe") {
+        exe := base . ".exe"
+        if ProcessExist(exe) {
+            if TryActivate(exe, full)
+                return true
+            procNoWindow := true
+        }
+    }
+
+    ; 3) 런처가 띄운 다른 이름의 프로세스 (기억해 둔 이름)
+    for a in names {
+        if (SubStr(a, 1, 4) = "win:")
             continue
-        return TryActivate(name, full)
+        if !ProcessExist(a)
+            continue
+        if TryActivate(a, full)
+            return true
+        procNoWindow := true
+    }
+
+    ; 창 제목 별칭이 없는데 프로세스만 살아 있으면 중복 실행을 막습니다.
+    ; 창 제목 별칭이 있으면 UI 가 없는 상태로 보고 새로 실행합니다.
+    if (procNoWindow && !hasTitle) {
+        Log("running-no-window", full . " = " . target)
+        ShowTip("이미 실행 중입니다 (창 없음)", 1800)
+        return true
     }
     return false
 }
 
 TryActivate(exe, full) {
-    found := false
     for id in WinGetList("ahk_exe " . exe) {
         cls := WinGetClass("ahk_id " . id)
         if (cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd" || cls = "Progman" || cls = "WorkerW")
             continue
         if (WinGetTitle("ahk_id " . id) = "")
             continue
-        found := true
         try {
             if (WinGetMinMax("ahk_id " . id) = -1)
                 WinRestore("ahk_id " . id)
@@ -188,15 +210,74 @@ TryActivate(exe, full) {
             return true
         }
     }
+    return false
+}
 
-    if (found) {
-        Log("activate-failed", full . " = " . exe)
-        ShowTip(exe . " 창을 앞으로 가져오지 못했습니다 (권한)", 2000)
-    } else {
-        Log("running-no-window", full . " = " . exe)
-        ShowTip(exe . " 는 이미 실행 중입니다 (창 없음)", 1800)
+TryActivateTitle(pat, full) {
+    if !WinExist(pat)
+        return false
+    try {
+        if (WinGetMinMax(pat) = -1)
+            WinRestore(pat)
+        WinActivate(pat)
     }
-    return true
+    if WinActive(pat) {
+        Log("activate-title", full . " = " . pat)
+        return true
+    }
+    Log("activate-title-failed", full . " = " . pat)
+    return false
+}
+
+WinTitles() {
+    m := Map()
+    for id in WinGetList() {
+        t := WinGetTitle("ahk_id " . id)
+        if (t = "")
+            continue
+        m[StrLower(t)] := t
+    }
+    return m
+}
+
+LearnWindow(target, before) {
+    global ALIASES
+    after := WinTitles()
+    fresh := []
+    for key, title in after {
+        if before.Has(key)
+            continue
+        if IsNoiseTitle(title)
+            continue
+        fresh.Push(title)
+    }
+    if (fresh.Length = 0 || fresh.Length > 2)
+        return
+    list := ALIASES.Has(target) ? ALIASES[target] : []
+    changed := false
+    for t in fresh {
+        entry := "win:" . t
+        if !HasValue(list, entry) && list.Length < 6 {
+            list.Push(entry)
+            changed := true
+        }
+    }
+    if !changed
+        return
+    ALIASES[target] := list
+    SaveAliases()
+    Log("learned-window", target . " -> " . JoinList(fresh))
+}
+
+IsNoiseTitle(t) {
+    lower := StrLower(t)
+    if InStr(lower, "사용자 계정 컨트롤") || InStr(lower, "user account control")
+        return true
+    if (lower = "program manager" || lower = "프로그램 관리자")
+        return true
+    if InStr(lower, "넘패드 매크로")
+        return true
+    return false
 }
 
 ; 실행 후 같은 폴더에서 실제로 떠 있는 프로그램 이름을 기억합니다 (런처 대응).
@@ -262,7 +343,7 @@ HasValue(list, v) {
 JoinList(list) {
     s := ""
     for item in list
-        s .= (s = "") ? item : ("," . item)
+        s .= (s = "") ? item : (";" . item)
     return s
 }
 
@@ -444,4 +525,6 @@ EnsureConfig() {
         txt .= line . Chr(10)
     FileAppend(txt, CONFIG, "UTF-8")
 }
+
+
 

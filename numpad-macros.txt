@@ -8,4 +8,4 @@
 2=app|W:\WorkSpace\4.KJWorkSpace\KJ_Service_CreateKey\KJ_FlowForge_CreateKey\KJ_FlowForge_CreateKey.exe
 3=app|W:\WorkSpace\4.KJWorkSpace\KJ_FlowForgeServer\KJFlowForgeManager.exe
 0=send|^c
-.=url|https://mail.google.com
+.=app|W:\WorkSpace\4.KJWorkSpace\WhisperAITranscription\dist\whisper-recorder\whisper-recorder.exe
