@@ -68,3 +68,10 @@ Ahk2Exe.exe /in source\numpad-macro-editor.ahk /out NumpadMacroEditor.exe /base 
 - 설정 다시 읽기 : 설정 파일을 즉시 다시 읽습니다.
 
 NumLock 상태가 바뀌면 화면 위쪽에 현재 모드가 잠깐 표시되고, 트레이 아이콘 설명에도 반영됩니다.
+
+## 런처 프로그램
+
+대상이 런처여서 실제 프로그램을 다른 이름으로 띄우는 경우(예: Manager.exe 가 Server.exe 를 실행),
+실행 후 같은 폴더에서 이름 앞부분이 같은 프로세스를 찾아 launch-map.txt 에 기억합니다.
+다음부터는 그 프로세스가 떠 있으면 새로 실행하지 않고 창을 앞으로 올립니다 (창이 없으면 안내만 표시).
+기억된 목록은 launch-map.txt 에서 직접 고칠 수 있습니다.

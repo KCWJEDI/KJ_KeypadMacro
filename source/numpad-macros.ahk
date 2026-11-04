@@ -7,23 +7,25 @@ Persistent
 ;    NumLock 꺼짐 -> 넘패드가 매크로 버튼
 ;    NumLock 켜짐 -> 평소처럼 숫자 입력
 ;
-;  같은 키라도 Shift / Ctrl / Alt / Shift+Ctrl 을 누르면 다른 매크로가 나갑니다.
-;  매크로는 numpad-macros.txt, 편집기는 NumpadMacroEditor.exe 입니다.
-;
-;  "프로그램 실행" 매크로는 그 프로그램이 이미 실행 중이면
-;  새로 띄우지 않고 기존 창을 맨 앞으로 가져옵니다.
+;  "프로그램 실행" 매크로는 이미 실행 중이면 새로 띄우지 않고
+;  기존 창을 맨 앞으로 가져옵니다.
+;  런처(exe)가 다른 이름의 실제 프로그램을 띄우는 경우를 위해,
+;  실행 후 같은 폴더에서 새로 뜬 프로그램 이름을 기억합니다 (launch-map.txt).
 ; ================================================================
 
 CONFIG := A_ScriptDir . Chr(92) . "numpad-macros.txt"
 DEBUGFLAG := A_ScriptDir . Chr(92) . "debug.on"
 DEBUGLOG := A_ScriptDir . Chr(92) . "debug.log"
+LAUNCHMAP := A_ScriptDir . Chr(92) . "launch-map.txt"
 
 MACRO := Map()
+ALIASES := Map()
 STAMP := ""
 lastNumLock := GetKeyState("NumLock", "T")
 
 EnsureConfig()
 LoadConfig()
+LoadAliases()
 SetTimer(WatchConfig, 1200)
 SetTimer(WatchNumLock, 400)
 UpdateTray()
@@ -132,14 +134,18 @@ Dispatch(full, nav) {
     }
 }
 
-; 이미 실행 중이면 그 창을 앞으로 가져오고, 없으면 새로 실행합니다.
 LaunchOrActivate(target, full) {
+    target := StrReplace(target, "/", Chr(92))
     if ActivateRunning(target, full)
+        return
+    if AliasRunning(target, full)
         return
     Run target
     Log("run", full . " = " . target)
+    SetTimer(LearnFromFolder.Bind(target), -1500)
 }
 
+; 1) 실행 파일 이름이 그대로인 경우
 ActivateRunning(target, full) {
     SplitPath target, , , &ext, &name
     if (ext != "exe")
@@ -147,7 +153,23 @@ ActivateRunning(target, full) {
     exe := name . ".exe"
     if !ProcessExist(exe)
         return false
+    return TryActivate(exe, full)
+}
 
+; 2) 런처가 띄운 다른 이름의 프로세스 (기억해 둔 이름)
+AliasRunning(target, full) {
+    global ALIASES
+    if !ALIASES.Has(target)
+        return false
+    for name in ALIASES[target] {
+        if !ProcessExist(name)
+            continue
+        return TryActivate(name, full)
+    }
+    return false
+}
+
+TryActivate(exe, full) {
     found := false
     for id in WinGetList("ahk_exe " . exe) {
         cls := WinGetClass("ahk_id " . id)
@@ -168,15 +190,113 @@ ActivateRunning(target, full) {
     }
 
     if (found) {
-        ; 창은 있는데 앞으로 못 올림 (관리자 권한 등)
         Log("activate-failed", full . " = " . exe)
         ShowTip(exe . " 창을 앞으로 가져오지 못했습니다 (권한)", 2000)
     } else {
-        ; 실행 중이지만 창이 없음 (트레이 상주 등)
         Log("running-no-window", full . " = " . exe)
         ShowTip(exe . " 는 이미 실행 중입니다 (창 없음)", 1800)
     }
     return true
+}
+
+; 실행 후 같은 폴더에서 실제로 떠 있는 프로그램 이름을 기억합니다 (런처 대응).
+LearnFromFolder(target) {
+    global ALIASES
+    names := RunningSiblings(target)
+    if (names.Length = 0)
+        return
+    list := ALIASES.Has(target) ? ALIASES[target] : []
+    changed := false
+    for name in names {
+        if !HasValue(list, name)
+            if (list.Length < 4) {
+                list.Push(name)
+                changed := true
+            }
+    }
+    if !changed
+        return
+    ALIASES[target] := list
+    SaveAliases()
+    Log("learned", target . " -> " . JoinList(list))
+    ShowTip("실행 감지 이름을 기억했습니다: " . JoinList(list), 2000)
+}
+
+; 대상과 같은 폴더에 있으면서 이름 앞부분이 같은 실행 중인 exe 를 찾습니다.
+RunningSiblings(target) {
+    global BS
+    out := []
+    SplitPath target, , &dir, , &base
+    if (dir = "" || base = "")
+        return out
+    pattern := RTrim(dir, Chr(92) . "/") . Chr(92) . "*.exe"
+    n := 0
+    loop files, pattern {
+        name := A_LoopFileName
+        if (StrLower(name) = StrLower(base . ".exe"))
+            continue
+        if !SameHead(name, base)
+            continue
+        n += 1
+        if (n > 40)
+            break
+        if ProcessExist(name)
+            out.Push(name)
+    }
+    return out
+}
+
+SameHead(a, b) {
+    if (StrLen(a) < 4 || StrLen(b) < 4)
+        return false
+    return StrLower(SubStr(a, 1, 4)) = StrLower(SubStr(b, 1, 4))
+}
+
+HasValue(list, v) {
+    for item in list
+        if (item = v)
+            return true
+    return false
+}
+
+JoinList(list) {
+    s := ""
+    for item in list
+        s .= (s = "") ? item : ("," . item)
+    return s
+}
+
+LoadAliases() {
+    global LAUNCHMAP, ALIASES
+    ALIASES := Map()
+    if !FileExist(LAUNCHMAP)
+        return
+    for line in StrSplit(FileRead(LAUNCHMAP, "UTF-8"), Chr(10), Chr(13)) {
+        line := Trim(line)
+        if (line = "" || SubStr(line, 1, 1) = ";")
+            continue
+        eq := InStr(line, "=")
+        if !eq
+            continue
+        target := Trim(SubStr(line, 1, eq - 1))
+        names := []
+        for name in StrSplit(SubStr(line, eq + 1), ";") {
+            name := Trim(name)
+            if (name != "")
+                names.Push(name)
+        }
+        if (names.Length > 0)
+            ALIASES[target] := names
+    }
+}
+
+SaveAliases() {
+    global LAUNCHMAP, ALIASES
+    out := ""
+    for target, names in ALIASES
+        out .= target . "=" . JoinList(names) . Chr(10)
+    try FileDelete LAUNCHMAP
+    FileAppend(out, LAUNCHMAP, "UTF-8")
 }
 
 LooksLikeProgram(v) {
